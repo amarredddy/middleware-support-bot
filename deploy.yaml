@@ -1,0 +1,226 @@
+# ADMIN NOTE: replace every YOUR_* placeholder before applying.
+#   - metadata.namespace          -> your approved OpenShift namespace
+#   - route.spec.host             -> your cluster's route hostname (or omit to auto-generate)
+#   - configmap support.yaml      -> your real product/GitHub/ServiceNow/xMatters URLs
+#
+# Apply with:
+#   oc apply -f deploy.yaml
+# Then trigger a binary build from source (see README.md):
+#   oc -n YOUR_NAMESPACE start-build middleware-support-bot --from-dir=. --follow
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: middleware-support
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: middleware-support-content
+  namespace: middleware-support
+  labels:
+    app: middleware-support-bot
+data:
+  support.yaml: |
+    settings:
+      org_name: "YOUR_ORG"
+      servicenow_url: "https://YOUR_INSTANCE.service-now.com/nav_to.do?uri=incident_list.do"
+      xmatters_url: "https://YOUR_ORG.xmatters.com/trigger"
+      middleware_ops_dl: "middleware-ops@YOUR_ORG.example.com"
+      admin_contact: "middleware-support-admin@YOUR_ORG.example.com"
+      wiki_base_url: "https://wiki.YOUR_ORG.example.com/middleware"
+    products:
+      - id: websphere
+        name: WebSphere
+        description: "IBM WebSphere Application Server - traditional and Liberty profiles."
+        resources:
+          - label: "Admin Console"
+            url: "https://YOUR_WEBSPHERE_ADMIN_CONSOLE.example.com"
+          - label: "Product Catalog / PCC"
+            url: "https://YOUR_PCC_CATALOG.example.com/websphere"
+          - label: "Wiki"
+            url: "https://wiki.YOUR_ORG.example.com/middleware/websphere"
+          - label: "Runbooks"
+            url: "https://wiki.YOUR_ORG.example.com/middleware/websphere/runbooks"
+        github:
+          org: "YOUR_GITHUB_ORG"
+          repo: "websphere-support"
+          issues_url: "https://github.com/YOUR_GITHUB_ORG/websphere-support/issues"
+      - id: apache
+        name: Apache HTTP Server
+        description: "Apache web/proxy tier in front of application servers."
+        resources:
+          - label: "Runbooks"
+            url: "https://wiki.YOUR_ORG.example.com/middleware/apache/runbooks"
+          - label: "Monitoring"
+            url: "https://YOUR_MONITORING_TOOL.example.com/dashboards/apache"
+          - label: "Wiki"
+            url: "https://wiki.YOUR_ORG.example.com/middleware/apache"
+        github:
+          org: "YOUR_GITHUB_ORG"
+          repo: "apache-support"
+          issues_url: "https://github.com/YOUR_GITHUB_ORG/apache-support/issues"
+      - id: tomcat
+        name: Tomcat
+        description: "Apache Tomcat servlet containers."
+        resources:
+          - label: "Runbooks"
+            url: "https://wiki.YOUR_ORG.example.com/middleware/tomcat/runbooks"
+          - label: "Monitoring"
+            url: "https://YOUR_MONITORING_TOOL.example.com/dashboards/tomcat"
+          - label: "Wiki"
+            url: "https://wiki.YOUR_ORG.example.com/middleware/tomcat"
+        github:
+          org: "YOUR_GITHUB_ORG"
+          repo: "tomcat-support"
+          issues_url: "https://github.com/YOUR_GITHUB_ORG/tomcat-support/issues"
+      - id: jboss
+        name: JBoss / WildFly
+        description: "JBoss EAP and WildFly application servers."
+        resources:
+          - label: "Runbooks"
+            url: "https://wiki.YOUR_ORG.example.com/middleware/jboss/runbooks"
+          - label: "Monitoring"
+            url: "https://YOUR_MONITORING_TOOL.example.com/dashboards/jboss"
+          - label: "Wiki"
+            url: "https://wiki.YOUR_ORG.example.com/middleware/jboss"
+        github:
+          org: "YOUR_GITHUB_ORG"
+          repo: "jboss-support"
+          issues_url: "https://github.com/YOUR_GITHUB_ORG/jboss-support/issues"
+      - id: liberty
+        name: WebSphere Liberty
+        description: "Standalone WebSphere Liberty runtime."
+        resources:
+          - label: "Runbooks"
+            url: "https://wiki.YOUR_ORG.example.com/middleware/liberty/runbooks"
+          - label: "Monitoring"
+            url: "https://YOUR_MONITORING_TOOL.example.com/dashboards/liberty"
+          - label: "Wiki"
+            url: "https://wiki.YOUR_ORG.example.com/middleware/liberty"
+        github:
+          org: "YOUR_GITHUB_ORG"
+          repo: "liberty-support"
+          issues_url: "https://github.com/YOUR_GITHUB_ORG/liberty-support/issues"
+---
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: middleware-support-bot
+  namespace: middleware-support
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: middleware-support-bot
+  namespace: middleware-support
+spec:
+  source:
+    type: Binary
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Dockerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: middleware-support-bot:latest
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: middleware-support-bot
+  namespace: middleware-support
+  labels:
+    app: middleware-support-bot
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: middleware-support-bot
+  template:
+    metadata:
+      labels:
+        app: middleware-support-bot
+    spec:
+      containers:
+        - name: middleware-support-bot
+          image: image-registry.openshift-image-registry.svc:5000/middleware-support/middleware-support-bot:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: CONFIG_PATH
+              value: /app/config/support.yaml
+          volumeMounts:
+            - name: support-content
+              mountPath: /app/config
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+      volumes:
+        - name: support-content
+          configMap:
+            name: middleware-support-content
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: middleware-support-bot
+  namespace: middleware-support
+spec:
+  selector:
+    app: middleware-support-bot
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: middleware-support-bot
+  namespace: middleware-support
+spec:
+  to:
+    kind: Service
+    name: middleware-support-bot
+  port:
+    targetPort: 8080
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: middleware-support-bot
+  namespace: middleware-support
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: middleware-support-bot
+  minReplicas: 2
+  maxReplicas: 4
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
