@@ -1,0 +1,37 @@
+Two of this project's pinned dependencies — pyyaml==6.0.2 and pydantic-core==2.23.4 — don't have prebuilt wheels for very new Python versions (this machine had 3.14). Without a wheel, pip falls back to compiling from source, which needs a C/Rust compiler toolchain. The errors looked like:
+
+
+error: Microsoft Visual C++ 14.0 or greater is required
+...
+error: linker `link.exe` not found
+(Mac/Linux equivalent would mention gcc/cargo/rustc missing instead.)
+
+Quick check: what Python version is on the other system (python --version)? If it's 3.14 (or brand new), that's almost certainly it.
+
+The fix I used — install an older Python, don't fight the compiler
+Installing Visual Studio Build Tools just to compile two packages is heavy and unnecessary. Instead, get a second Python version (3.11 or 3.12 both work — I verified both) and build the venv on that instead.
+
+Option A — if uv is installed (check with uv --version):
+
+
+uv python install 3.11
+Remove-Item -Recurse -Force .venv    # if you already created one
+uv venv .venv --python 3.11
+uv pip install -r requirements.txt --python .venv\Scripts\python.exe
+Note: uv venv doesn't bundle pip into the venv, so use uv pip install (not plain pip install) here.
+
+Option B — no uv, plain Python (simpler if you don't have it):
+
+Install Python 3.11 or 3.12 from python.org (or winget install Python.Python.3.12 on Windows) — this can coexist with your existing 3.14, no need to remove anything.
+Find the new interpreter's path — installer usually adds a py launcher, so:
+
+py -3.12 --version   # confirm it's there
+Rebuild the venv using that specific interpreter instead of the default python:
+
+Remove-Item -Recurse -Force .venv
+py -3.12 -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+Either way, once the venv is on 3.11/3.12, pip install -r requirements.txt should finish cleanly in a few seconds — that's what happened here.
+
+Paste me the exact error text and python --version output from the other system if you want me to confirm it's the same cause before you go through this.
